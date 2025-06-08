@@ -15,7 +15,12 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QComboBox>
-#include <QMap>
+#include <QCheckBox>
+#include <QSet>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 class TaskWidget : public QWidget {
     Q_OBJECT
@@ -23,13 +28,11 @@ public:
     TaskWidget(QWidget *parent = nullptr) : QWidget(parent) {
         QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-        // Заголовок
         QLabel *title = new QLabel("📋 Задачи");
         title->setAlignment(Qt::AlignCenter);
         title->setStyleSheet("font-size: 24px; font-weight: bold;");
         mainLayout->addWidget(title);
 
-        // Фильтр по тегам (ComboBox)
         tagFilterCombo = new QComboBox;
         tagFilterCombo->addItem("Все теги");
         tagFilterCombo->setStyleSheet(
@@ -46,7 +49,6 @@ public:
         mainLayout->addWidget(tagFilterCombo);
         connect(tagFilterCombo, &QComboBox::currentTextChanged, this, &TaskWidget::filterTasksByTag);
 
-        // Ввод задачи
         QHBoxLayout *inputLayout = new QHBoxLayout;
         taskInput = new QLineEdit;
         taskInput->setPlaceholderText("Введите новую задачу...");
@@ -79,7 +81,6 @@ public:
 
         mainLayout->addLayout(inputLayout);
 
-        // Область задач
         scrollArea = new QScrollArea;
         scrollArea->setWidgetResizable(true);
 
@@ -91,23 +92,27 @@ public:
         scrollArea->setWidget(containerWidget);
         mainLayout->addWidget(scrollArea);
 
-        // Подключение кнопок
         connect(dateBtn, &QPushButton::clicked, this, &TaskWidget::openDatePopup);
         connect(tagBtn, &QPushButton::clicked, this, &TaskWidget::openTagPopup);
         connect(addBtn, &QPushButton::clicked, this, &TaskWidget::addTask);
+
+        loadTasksFromFile();
     }
 
 private:
     struct TaskItem {
-        QString text;      // Текст задачи с датой и тегом
+        QString text;
         QString date;
         QString tag;
-        QFrame *frame;
-        QLabel *label;
-        QLineEdit *edit;
-        QPushButton *editBtn;
-        QPushButton *saveBtn;
-        QPushButton *removeBtn;
+        bool completed = false;
+
+        QFrame *frame = nullptr;
+        QLabel *label = nullptr;
+        QLineEdit *edit = nullptr;
+        QPushButton *editBtn = nullptr;
+        QPushButton *saveBtn = nullptr;
+        QPushButton *removeBtn = nullptr;
+        QCheckBox *checkBox = nullptr;
     };
 
     QLineEdit *taskInput;
@@ -118,7 +123,9 @@ private:
     QString selectedTag;
     QComboBox *tagFilterCombo;
 
-    QList<TaskItem> tasks;
+    QList<TaskItem*> tasks;  // <- Исправлено: хранить указатели на TaskItem
+
+    const QString tasksFile = "tasks.json";
 
     void openDatePopup() {
         QDialog dialog(this);
@@ -152,32 +159,38 @@ private:
         QString text = taskInput->text().trimmed();
         if (text.isEmpty()) return;
 
-        QString fullText = text;
-        if (!selectedDate.isEmpty()) fullText += "  ⏰ " + selectedDate;
-        if (!selectedTag.isEmpty()) fullText += "  🏷 " + selectedTag;
+        addTaskItem(text, selectedDate, selectedTag, false);
 
-        addTaskItem(text, selectedDate, selectedTag, fullText);
-
-        // Обновить список тегов для фильтра
         updateTagFilter();
 
-        // Очистка
         taskInput->clear();
         selectedDate.clear();
         selectedTag.clear();
 
-        // Обновить фильтр, чтобы сразу показать задачу, если фильтр не "Все теги"
         filterTasksByTag(tagFilterCombo->currentText());
+
+        saveTasksToFile();
     }
 
-    void addTaskItem(const QString &text, const QString &date, const QString &tag, const QString &fullText) {
+    void addTaskItem(const QString &text, const QString &date, const QString &tag, bool completed) {
+        QString fullText = text;
+        if (!date.isEmpty()) fullText += "  ⏰ " + date;
+        if (!tag.isEmpty()) fullText += "  🏷 " + tag;
+
         QFrame *taskFrame = new QFrame;
         taskFrame->setFrameShape(QFrame::Box);
         taskFrame->setStyleSheet("background-color: #2e2e2e; border-radius: 10px; padding: 10px;");
         QHBoxLayout *taskRow = new QHBoxLayout(taskFrame);
 
+        QCheckBox *checkBox = new QCheckBox;
+        checkBox->setChecked(completed);
+        taskRow->addWidget(checkBox);
+
         QLabel *taskLabel = new QLabel(fullText);
         taskLabel->setStyleSheet("color: white; font-size: 16px;");
+        if (completed) {
+            taskLabel->setStyleSheet("color: gray; font-size: 16px; text-decoration: line-through;");
+        }
         taskRow->addWidget(taskLabel);
 
         QLineEdit *taskEdit = new QLineEdit(fullText);
@@ -211,102 +224,140 @@ private:
 
         taskLayout->addWidget(taskFrame);
 
-        TaskItem item {text, date, tag, taskFrame, taskLabel, taskEdit, editBtn, saveBtn, removeBtn};
+        // Создаем объект в куче и сохраняем указатель
+        TaskItem *item = new TaskItem;
+        item->text = text;
+        item->date = date;
+        item->tag = tag;
+        item->completed = completed;
+        item->frame = taskFrame;
+        item->label = taskLabel;
+        item->edit = taskEdit;
+        item->editBtn = editBtn;
+        item->saveBtn = saveBtn;
+        item->removeBtn = removeBtn;
+        item->checkBox = checkBox;
+
         tasks.append(item);
 
-        // Редактирование
-        connect(editBtn, &QPushButton::clicked, this, [=]() {
-            taskLabel->setVisible(false);
-            taskEdit->setVisible(true);
-            taskEdit->setFocus();
-            editBtn->setVisible(false);
-            saveBtn->setVisible(true);
-            saveBtn->setEnabled(true);
+        // Используем захват по указателю (ссылке)
+        connect(checkBox, &QCheckBox::stateChanged, this, [this, item](int state){
+            bool done = (state == Qt::Checked);
+            item->completed = done;
+            if (done) {
+                item->label->setStyleSheet("color: gray; font-size: 16px; text-decoration: line-through;");
+            } else {
+                item->label->setStyleSheet("color: white; font-size: 16px; text-decoration: none;");
+            }
+            saveTasksToFile();
         });
 
-        // Сохранение изменений
-        connect(saveBtn, &QPushButton::clicked, this, [=]() {
-            QString newText = taskEdit->text().trimmed();
+        connect(editBtn, &QPushButton::clicked, this, [item]() {
+            item->label->setVisible(false);
+            item->edit->setVisible(true);
+            item->edit->setFocus();
+            item->editBtn->setVisible(false);
+            item->saveBtn->setVisible(true);
+            item->saveBtn->setEnabled(true);
+        });
+
+        connect(saveBtn, &QPushButton::clicked, this, [this, item]() {
+            QString newText = item->edit->text().trimmed();
             if (newText.isEmpty()) return;
 
-            // Обновить label
-            taskLabel->setText(newText);
-            taskLabel->setVisible(true);
-            taskEdit->setVisible(false);
-            saveBtn->setVisible(false);
-            saveBtn->setEnabled(false);
-            editBtn->setVisible(true);
+            item->label->setText(newText);
+            item->label->setVisible(true);
+            item->edit->setVisible(false);
+            item->editBtn->setVisible(true);
+            item->saveBtn->setVisible(false);
 
-            // Парсим дату и тег из newText (упрощённо)
-            // Например, ищем "🏷 " и "⏰ " и выделяем
-            QString newDate, newTag;
-            int tagPos = newText.indexOf("🏷");
-            int datePos = newText.indexOf("⏰");
+            item->text = newText;
 
-            if (tagPos != -1)
-                newTag = newText.mid(tagPos + 2).trimmed();
-            if (datePos != -1)
-                newDate = newText.mid(datePos + 2, tagPos != -1 ? tagPos - datePos - 2 : newText.length()).trimmed();
-
-            // Обновляем в списке
-            for (TaskItem &t : tasks) {
-                if (t.frame == taskFrame) {
-                    t.text = newText;
-                    t.date = newDate;
-                    t.tag = newTag;
-                    break;
-                }
-            }
-
-            updateTagFilter();
-            filterTasksByTag(tagFilterCombo->currentText());
+            saveTasksToFile();
         });
 
-        // Удаление
-        connect(removeBtn, &QPushButton::clicked, taskFrame, [=]() {
-            taskLayout->removeWidget(taskFrame);
-            taskFrame->deleteLater();
-            // Удаляем из списка задач
-            for (int i = 0; i < tasks.size(); ++i) {
-                if (tasks[i].frame == taskFrame) {
-                    tasks.removeAt(i);
-                    break;
-                }
-            }
+        connect(removeBtn, &QPushButton::clicked, this, [this, item]() {
+            tasks.removeOne(item);
+            item->frame->deleteLater();
+            delete item;
+
             updateTagFilter();
             filterTasksByTag(tagFilterCombo->currentText());
+
+            saveTasksToFile();
         });
     }
 
     void updateTagFilter() {
-        QSet<QString> uniqueTags;
-        for (const TaskItem &item : tasks) {
-            if (!item.tag.isEmpty())
-                uniqueTags.insert(item.tag);
+        QSet<QString> tags;
+        for (TaskItem *task : qAsConst(tasks)) {
+            if (!task->tag.isEmpty()) tags.insert(task->tag);
         }
-
-        QString currentSelection = tagFilterCombo->currentText();
+        QString current = tagFilterCombo->currentText();
 
         tagFilterCombo->blockSignals(true);
         tagFilterCombo->clear();
         tagFilterCombo->addItem("Все теги");
-        for (const QString &tag : uniqueTags) {
+        for (const QString &tag : tags) {
             tagFilterCombo->addItem(tag);
         }
+        int idx = tagFilterCombo->findText(current);
+        if (idx >= 0) {
+            tagFilterCombo->setCurrentIndex(idx);
+        }
         tagFilterCombo->blockSignals(false);
-
-        int index = tagFilterCombo->findText(currentSelection);
-        if (index != -1)
-            tagFilterCombo->setCurrentIndex(index);
-        else
-            tagFilterCombo->setCurrentIndex(0);
     }
 
     void filterTasksByTag(const QString &tag) {
-        for (TaskItem &item : tasks) {
-            bool visible = (tag == "Все теги") || (item.tag == tag);
-            item.frame->setVisible(visible);
+        for (TaskItem *task : tasks) {
+            bool visible = (tag == "Все теги") || (task->tag == tag);
+            task->frame->setVisible(visible);
         }
+    }
+
+    void saveTasksToFile() {
+        QJsonArray jsonTasks;
+        for (TaskItem *task : qAsConst(tasks)) {
+            QJsonObject obj;
+            obj["text"] = task->text;
+            obj["date"] = task->date;
+            obj["tag"] = task->tag;
+            obj["completed"] = task->completed;
+            jsonTasks.append(obj);
+        }
+
+        QJsonDocument doc(jsonTasks);
+        QFile file(tasksFile);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(doc.toJson());
+            file.close();
+        }
+    }
+
+    void loadTasksFromFile() {
+        QFile file(tasksFile);
+        if (!file.exists()) return;
+        if (!file.open(QIODevice::ReadOnly)) return;
+
+        QByteArray data = file.readAll();
+        file.close();
+
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (!doc.isArray()) return;
+
+        QJsonArray jsonTasks = doc.array();
+        for (const QJsonValue &val : jsonTasks) {
+            if (!val.isObject()) continue;
+            QJsonObject obj = val.toObject();
+            QString text = obj["text"].toString();
+            QString date = obj["date"].toString();
+            QString tag = obj["tag"].toString();
+            bool completed = obj["completed"].toBool(false);
+
+            addTaskItem(text, date, tag, completed);
+        }
+        updateTagFilter();
+        filterTasksByTag(tagFilterCombo->currentText());
     }
 };
 
