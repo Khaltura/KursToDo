@@ -1,209 +1,132 @@
-#pragma once
+#ifndef TASKWIDGET_H
+#define TASKWIDGET_H
 
 #include <QWidget>
-#include <QLineEdit>
-#include <QDateEdit>
-#include <QComboBox>
-#include <QPushButton>
-#include <QListWidget>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QMessageBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QCalendarWidget>
 #include <QInputDialog>
-#include <QMenu>
-#include <QAction>
-#include <QSqlQuery>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDateEdit>
+#include <QDate>
 
-#include "DatabaseManager.h"
-
-class TaskWidget : public QWidget
-{
+class TaskWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit TaskWidget(QWidget *parent = nullptr)
-        : QWidget(parent)
-    {
-        dbManager.openDatabase("tasks_notes.db");
-        dbManager.createTables();
+    TaskWidget(QWidget *parent = nullptr) : QWidget(parent) {
+        QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-        auto *mainLayout = new QVBoxLayout(this);
+        // Заголовок
+        QLabel *title = new QLabel("📋 Задачи");
+        title->setAlignment(Qt::AlignCenter);
+        title->setStyleSheet("font-size: 24px; font-weight: bold;");
+        mainLayout->addWidget(title);
 
-        input = new QLineEdit(this);
-        input->setPlaceholderText("Введите новую задачу");
+        // Ввод задачи
+        QHBoxLayout *inputLayout = new QHBoxLayout;
+        taskInput = new QLineEdit;
+        taskInput->setPlaceholderText("Введите новую задачу...");
+        inputLayout->addWidget(taskInput);
 
-        dateEdit = new QDateEdit(QDate::currentDate(), this);
-        dateEdit->setCalendarPopup(true);
+        QPushButton *dateBtn = new QPushButton("📅");
+        QPushButton *tagBtn = new QPushButton("🏷");
+        QPushButton *addBtn = new QPushButton("➕");
 
-        tagBox = new QComboBox(this);
-        tagBox->addItems({"Без тега", "Учеба", "Работа", "Личное"});
-
-        addBtn = new QPushButton("Добавить", this);
-
-        auto *inputLayout = new QHBoxLayout();
-        inputLayout->addWidget(input);
-        inputLayout->addWidget(dateEdit);
-        inputLayout->addWidget(tagBox);
+        inputLayout->addWidget(dateBtn);
+        inputLayout->addWidget(tagBtn);
         inputLayout->addWidget(addBtn);
 
-        list = new QListWidget(this);
-        list->setContextMenuPolicy(Qt::CustomContextMenu);
-
         mainLayout->addLayout(inputLayout);
-        mainLayout->addWidget(list);
 
+        // Область задач
+        scrollArea = new QScrollArea;
+        scrollArea->setWidgetResizable(true);
+
+        QWidget *container = new QWidget;
+        taskLayout = new QVBoxLayout(container);
+        taskLayout->setAlignment(Qt::AlignTop);
+        container->setLayout(taskLayout);
+
+        scrollArea->setWidget(container);
+        mainLayout->addWidget(scrollArea);
+
+        // Подключение кнопок
+        connect(dateBtn, &QPushButton::clicked, this, &TaskWidget::openDatePopup);
+        connect(tagBtn, &QPushButton::clicked, this, &TaskWidget::openTagPopup);
         connect(addBtn, &QPushButton::clicked, this, &TaskWidget::addTask);
-        connect(list, &QListWidget::customContextMenuRequested, this, &TaskWidget::showContextMenu);
-
-        loadTasks();
-    }
-
-private slots:
-    void addTask()
-    {
-        QString taskText = input->text().trimmed();
-        if (taskText.isEmpty()) {
-            QMessageBox::warning(this, "Ошибка", "Введите текст задачи");
-            return;
-        }
-
-        QString dateStr = dateEdit->date().toString("yyyy-MM-dd");
-        QString tag = tagBox->currentText();
-
-        if (!dbManager.addTask(taskText, dateStr, tag)) {
-            QMessageBox::warning(this, "Ошибка", "Не удалось сохранить задачу в базу данных");
-            return;
-        }
-
-        loadTasks();
-
-        input->clear();
-        dateEdit->setDate(QDate::currentDate());
-        tagBox->setCurrentIndex(0);
-    }
-
-    void loadTasks()
-    {
-        list->clear();
-        QSqlQuery query = dbManager.getAllTasks();
-        while (query.next()) {
-            int id = query.value("id").toInt();
-            QString text = query.value("text").toString();
-            QString date = query.value("date").toString();
-            QString tag = query.value("tag").toString();
-
-            QString itemText = QString("%1 [%2] {%3}").arg(text, date, tag);
-            QListWidgetItem *item = new QListWidgetItem(itemText);
-            item->setData(Qt::UserRole, id);
-            list->addItem(item);
-        }
-    }
-
-    void showContextMenu(const QPoint &pos)
-    {
-        QListWidgetItem *item = list->itemAt(pos);
-        if (!item)
-            return;
-
-        QMenu contextMenu;
-        QAction *editAction = contextMenu.addAction("Редактировать");
-        QAction *deleteAction = contextMenu.addAction("Удалить");
-
-        QAction *selectedAction = contextMenu.exec(list->viewport()->mapToGlobal(pos));
-        if (selectedAction == editAction) {
-            editTask(item);
-        } else if (selectedAction == deleteAction) {
-            deleteTask(item);
-        }
-    }
-
-    void editTask(QListWidgetItem *item)
-    {
-        int id = item->data(Qt::UserRole).toInt();
-
-        QSqlQuery query = dbManager.getTaskById(id);
-        if (!query.next()) {
-            QMessageBox::warning(this, "Ошибка", "Задача не найдена в базе");
-            return;
-        }
-
-        QString currentText = query.value("text").toString();
-        QString currentDateStr = query.value("date").toString();
-        QString currentTag = query.value("tag").toString();
-
-        bool ok;
-        QString newText = QInputDialog::getText(this, "Редактировать задачу",
-                                                "Текст задачи:", QLineEdit::Normal,
-                                                currentText, &ok);
-        if (!ok || newText.trimmed().isEmpty())
-            return;
-
-        QDate currentDate = QDate::fromString(currentDateStr, "yyyy-MM-dd");
-        QDate newDate = getDateFromDialog(this, "Редактировать дату задачи", currentDate);
-        if (!newDate.isValid())
-            return; // Отмена
-
-        QStringList tags = {"Без тега", "Учеба", "Работа", "Личное"};
-        QString newTag = QInputDialog::getItem(this, "Редактировать задачу",
-                                               "Тег:", tags, tags.indexOf(currentTag), false, &ok);
-        if (!ok)
-            return;
-
-        if (!dbManager.updateTask(id, newText.trimmed(), newDate.toString("yyyy-MM-dd"), newTag)) {
-            QMessageBox::warning(this, "Ошибка", "Не удалось обновить задачу");
-            return;
-        }
-
-        loadTasks();
-    }
-
-    void deleteTask(QListWidgetItem *item)
-    {
-        int id = item->data(Qt::UserRole).toInt();
-
-        if (QMessageBox::question(this, "Удаление", "Удалить задачу?") == QMessageBox::Yes) {
-            if (!dbManager.deleteTask(id)) {
-                QMessageBox::warning(this, "Ошибка", "Не удалось удалить задачу");
-                return;
-            }
-            loadTasks();
-        }
     }
 
 private:
-    // Функция для выбора даты с диалогом
-    QDate getDateFromDialog(QWidget *parent, const QString &title, const QDate &currentDate)
-    {
-        QDialog dialog(parent);
-        dialog.setWindowTitle(title);
+    QLineEdit *taskInput;
+    QScrollArea *scrollArea;
+    QVBoxLayout *taskLayout;
+    QString selectedDate;
+    QString selectedTag;
+
+    void openDatePopup() {
+        QDialog dialog(this);
+        dialog.setWindowTitle("Выберите дату");
 
         QVBoxLayout *layout = new QVBoxLayout(&dialog);
-        QDateEdit *dateEditDialog = new QDateEdit(currentDate, &dialog);
-        dateEditDialog->setCalendarPopup(true);
-        layout->addWidget(dateEditDialog);
+        QCalendarWidget *calendar = new QCalendarWidget;
+        layout->addWidget(calendar);
 
-        QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-                                                         Qt::Horizontal, &dialog);
+        QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
         layout->addWidget(buttons);
 
-        QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        connect(buttons, &QDialogButtonBox::accepted, [&]() {
+            selectedDate = calendar->selectedDate().toString("dd.MM.yyyy");
+            dialog.accept();
+        });
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
-        if (dialog.exec() == QDialog::Accepted) {
-            return dateEditDialog->date();
-        } else {
-            return QDate(); // invalid date — отмена
+        dialog.exec();
+    }
+
+    void openTagPopup() {
+        bool ok;
+        QString tag = QInputDialog::getText(this, "Введите тег", "Тег:", QLineEdit::Normal, "", &ok);
+        if (ok && !tag.isEmpty()) {
+            selectedTag = tag;
         }
     }
 
-private:
-    QLineEdit *input;
-    QDateEdit *dateEdit;
-    QComboBox *tagBox;
-    QPushButton *addBtn;
-    QListWidget *list;
+    void addTask() {
+        QString text = taskInput->text().trimmed();
+        if (text.isEmpty()) return;
 
-    DatabaseManager dbManager;
+        QString fullText = text;
+        if (!selectedDate.isEmpty()) fullText += "  ⏰ " + selectedDate;
+        if (!selectedTag.isEmpty()) fullText += "  🏷 " + selectedTag;
+
+        QFrame *taskFrame = new QFrame;
+        taskFrame->setFrameShape(QFrame::Box);
+        taskFrame->setStyleSheet("background-color: #2e2e2e; border-radius: 10px; padding: 10px;");
+        QHBoxLayout *taskRow = new QHBoxLayout(taskFrame);
+
+        QLabel *taskLabel = new QLabel(fullText);
+        taskLabel->setStyleSheet("color: white; font-size: 16px;");
+        taskRow->addWidget(taskLabel);
+
+        QPushButton *removeBtn = new QPushButton("❌");
+        removeBtn->setFixedSize(30, 30);
+        taskRow->addWidget(removeBtn);
+
+        taskLayout->addWidget(taskFrame);
+
+        connect(removeBtn, &QPushButton::clicked, taskFrame, [=]() {
+            taskLayout->removeWidget(taskFrame);
+            taskFrame->deleteLater();
+        });
+
+        // Очистка
+        taskInput->clear();
+        selectedDate.clear();
+        selectedTag.clear();
+    }
 };
+
+#endif // TASKWIDGET_H
