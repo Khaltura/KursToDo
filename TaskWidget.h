@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMessageBox>
 
 class TaskWidget : public QWidget {
     Q_OBJECT
@@ -123,7 +124,7 @@ private:
     QString selectedTag;
     QComboBox *tagFilterCombo;
 
-    QList<TaskItem*> tasks;  // <- Исправлено: хранить указатели на TaskItem
+    QList<TaskItem*> tasks;
 
     const QString tasksFile = "tasks.json";
 
@@ -157,7 +158,10 @@ private:
 
     void addTask() {
         QString text = taskInput->text().trimmed();
-        if (text.isEmpty()) return;
+        if (text.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Задача не может быть пустой!");
+            return;
+        }
 
         addTaskItem(text, selectedDate, selectedTag, false);
 
@@ -224,7 +228,6 @@ private:
 
         taskLayout->addWidget(taskFrame);
 
-        // Создаем объект в куче и сохраняем указатель
         TaskItem *item = new TaskItem;
         item->text = text;
         item->date = date;
@@ -240,7 +243,6 @@ private:
 
         tasks.append(item);
 
-        // Используем захват по указателю (ссылке)
         connect(checkBox, &QCheckBox::stateChanged, this, [this, item](int state){
             bool done = (state == Qt::Checked);
             item->completed = done;
@@ -263,7 +265,10 @@ private:
 
         connect(saveBtn, &QPushButton::clicked, this, [this, item]() {
             QString newText = item->edit->text().trimmed();
-            if (newText.isEmpty()) return;
+            if (newText.isEmpty()) {
+                QMessageBox::warning(this, "Ошибка", "Задача не может быть пустой!");
+                return;
+            }
 
             item->label->setText(newText);
             item->label->setVisible(true);
@@ -356,6 +361,7 @@ private:
 
             addTaskItem(text, date, tag, completed);
         }
+
         updateTagFilter();
         filterTasksByTag(tagFilterCombo->currentText());
     }
