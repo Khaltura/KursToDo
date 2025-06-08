@@ -15,6 +15,7 @@
 #include <QTextBrowser>
 #include <QTextCursor>
 #include <QTextListFormat>
+#include <QTextDocument>
 
 class NotesWidget : public QWidget {
     Q_OBJECT
@@ -95,7 +96,16 @@ private:
 
     void addNote() {
         QString html = noteInput->toHtml().trimmed();
-        if (html.isEmpty()) return;
+
+        // Проверяем, что заметка не пустая (без текста)
+        QTextDocument doc;
+        doc.setHtml(html);
+        QString plainText = doc.toPlainText().trimmed();
+
+        if (plainText.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Нельзя добавить пустую заметку.");
+            return;
+        }
 
         // Создание карточки
         QFrame *noteFrame = new QFrame;
