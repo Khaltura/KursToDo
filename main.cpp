@@ -1,6 +1,7 @@
 // main.cpp
 #include <QApplication>
 #include "MainWindow.h"
+#include "DatabaseManager.h"
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
@@ -30,6 +31,14 @@ int main(int argc, char *argv[]) {
             color: #ffffff;
         }
     )");
+
+    DatabaseManager dbManager;
+    if (!dbManager.openDatabase("tasks_notes.db")) {
+        // Ошибка открытия БД
+    }
+    if (!dbManager.createTables()) {
+        // Ошибка создания таблиц
+    }
 
     MainWindow window;
     window.resize(1000, 700);

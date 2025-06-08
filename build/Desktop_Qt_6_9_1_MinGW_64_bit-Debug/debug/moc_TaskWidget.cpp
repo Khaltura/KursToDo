@@ -39,10 +39,35 @@ template <> constexpr inline auto TaskWidget::qt_create_metaobjectdata<qt_meta_t
 {
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
-        "TaskWidget"
+        "TaskWidget",
+        "addTask",
+        "",
+        "loadTasks",
+        "showContextMenu",
+        "pos",
+        "editTask",
+        "QListWidgetItem*",
+        "item",
+        "deleteTask"
     };
 
     QtMocHelpers::UintData qt_methods {
+        // Slot 'addTask'
+        QtMocHelpers::SlotData<void()>(1, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'loadTasks'
+        QtMocHelpers::SlotData<void()>(3, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'showContextMenu'
+        QtMocHelpers::SlotData<void(const QPoint &)>(4, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::QPoint, 5 },
+        }}),
+        // Slot 'editTask'
+        QtMocHelpers::SlotData<void(QListWidgetItem *)>(6, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 7, 8 },
+        }}),
+        // Slot 'deleteTask'
+        QtMocHelpers::SlotData<void(QListWidgetItem *)>(9, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 7, 8 },
+        }}),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -64,10 +89,16 @@ Q_CONSTINIT const QMetaObject TaskWidget::staticMetaObject = { {
 void TaskWidget::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
 {
     auto *_t = static_cast<TaskWidget *>(_o);
-    (void)_t;
-    (void)_c;
-    (void)_id;
-    (void)_a;
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        switch (_id) {
+        case 0: _t->addTask(); break;
+        case 1: _t->loadTasks(); break;
+        case 2: _t->showContextMenu((*reinterpret_cast< std::add_pointer_t<QPoint>>(_a[1]))); break;
+        case 3: _t->editTask((*reinterpret_cast< std::add_pointer_t<QListWidgetItem*>>(_a[1]))); break;
+        case 4: _t->deleteTask((*reinterpret_cast< std::add_pointer_t<QListWidgetItem*>>(_a[1]))); break;
+        default: ;
+        }
+    }
 }
 
 const QMetaObject *TaskWidget::metaObject() const
@@ -86,6 +117,18 @@ void *TaskWidget::qt_metacast(const char *_clname)
 int TaskWidget::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 {
     _id = QWidget::qt_metacall(_c, _id, _a);
+    if (_id < 0)
+        return _id;
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        if (_id < 5)
+            qt_static_metacall(this, _c, _id, _a);
+        _id -= 5;
+    }
+    if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
+        if (_id < 5)
+            *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
+        _id -= 5;
+    }
     return _id;
 }
 QT_WARNING_POP
