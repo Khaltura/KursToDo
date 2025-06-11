@@ -14,7 +14,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     sideLayout->setSpacing(10);
 
     taskButton = new QPushButton("📋 Tasks");
-    calendarButton = new QPushButton("📅 Calendar")
+    calendarButton = new QPushButton("📅 Calendar");
     notesButton = new QPushButton("📝 Notes");
 
     sideLayout->addWidget(taskButton);
