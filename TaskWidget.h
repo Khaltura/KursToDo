@@ -100,6 +100,10 @@ public:
         loadTasksFromFile();
     }
 
+signals:
+    // Новый сигнал для передачи списка задач на дату
+    void tasksForDateRequested(const QString &date, const QList<QString> &tasksTexts);
+
 private:
     struct TaskItem {
         QString text;
@@ -249,99 +253,70 @@ private:
             if (done) {
                 item->label->setStyleSheet("color: gray; font-size: 16px; text-decoration: line-through;");
             } else {
-                item->label->setStyleSheet("color: white; font-size: 16px; text-decoration: none;");
+                item->label->setStyleSheet("color: white; font-size: 16px;");
             }
             saveTasksToFile();
         });
 
-        connect(editBtn, &QPushButton::clicked, this, [item]() {
+        connect(editBtn, &QPushButton::clicked, this, [this, item](){
             item->label->setVisible(false);
+            item->edit->setText(item->label->text());
             item->edit->setVisible(true);
-            item->edit->setFocus();
             item->editBtn->setVisible(false);
             item->saveBtn->setVisible(true);
             item->saveBtn->setEnabled(true);
         });
 
-        connect(saveBtn, &QPushButton::clicked, this, [this, item]() {
-            QString newText = item->edit->text().trimmed();
+        connect(saveBtn, &QPushButton::clicked, this, [this, item](){
+            QString newText = item->edit->text();
             if (newText.isEmpty()) {
                 QMessageBox::warning(this, "Ошибка", "Задача не может быть пустой!");
                 return;
             }
-
+            item->text = newText; // Не меняем дату и тег здесь, чтобы не ломать логику
             item->label->setText(newText);
             item->label->setVisible(true);
             item->edit->setVisible(false);
             item->editBtn->setVisible(true);
             item->saveBtn->setVisible(false);
-
-            item->text = newText;
-
             saveTasksToFile();
         });
 
-        connect(removeBtn, &QPushButton::clicked, this, [this, item]() {
-            tasks.removeOne(item);
+        connect(removeBtn, &QPushButton::clicked, this, [this, item](){
+            taskLayout->removeWidget(item->frame);
             item->frame->deleteLater();
+            tasks.removeOne(item);
             delete item;
-
-            updateTagFilter();
-            filterTasksByTag(tagFilterCombo->currentText());
-
             saveTasksToFile();
         });
-    }
-
-    void updateTagFilter() {
-        QSet<QString> tags;
-        for (TaskItem *task : qAsConst(tasks)) {
-            if (!task->tag.isEmpty()) tags.insert(task->tag);
-        }
-        QString current = tagFilterCombo->currentText();
-
-        tagFilterCombo->blockSignals(true);
-        tagFilterCombo->clear();
-        tagFilterCombo->addItem("Все теги");
-        for (const QString &tag : tags) {
-            tagFilterCombo->addItem(tag);
-        }
-        int idx = tagFilterCombo->findText(current);
-        if (idx >= 0) {
-            tagFilterCombo->setCurrentIndex(idx);
-        }
-        tagFilterCombo->blockSignals(false);
     }
 
     void filterTasksByTag(const QString &tag) {
-        for (TaskItem *task : tasks) {
-            bool visible = (tag == "Все теги") || (task->tag == tag);
-            task->frame->setVisible(visible);
+        for (TaskItem *item : tasks) {
+            bool show = (tag == "Все теги") || (item->tag == tag);
+            item->frame->setVisible(show);
         }
     }
 
-    void saveTasksToFile() {
-        QJsonArray jsonTasks;
-        for (TaskItem *task : qAsConst(tasks)) {
-            QJsonObject obj;
-            obj["text"] = task->text;
-            obj["date"] = task->date;
-            obj["tag"] = task->tag;
-            obj["completed"] = task->completed;
-            jsonTasks.append(obj);
+    void updateTagFilter() {
+        QSet<QString> tagsSet;
+        for (TaskItem *item : tasks) {
+            if (!item->tag.isEmpty())
+                tagsSet.insert(item->tag);
         }
-
-        QJsonDocument doc(jsonTasks);
-        QFile file(tasksFile);
-        if (file.open(QIODevice::WriteOnly)) {
-            file.write(doc.toJson());
-            file.close();
+        QString current = tagFilterCombo->currentText();
+        tagFilterCombo->clear();
+        tagFilterCombo->addItem("Все теги");
+        for (const QString &tag : tagsSet) {
+            tagFilterCombo->addItem(tag);
         }
+        int idx = tagFilterCombo->findText(current);
+        if (idx != -1)
+            tagFilterCombo->setCurrentIndex(idx);
     }
 
     void loadTasksFromFile() {
         QFile file(tasksFile);
-        if (!file.exists()) return;
         if (!file.open(QIODevice::ReadOnly)) return;
 
         QByteArray data = file.readAll();
@@ -350,20 +325,49 @@ private:
         QJsonDocument doc = QJsonDocument::fromJson(data);
         if (!doc.isArray()) return;
 
-        QJsonArray jsonTasks = doc.array();
-        for (const QJsonValue &val : jsonTasks) {
-            if (!val.isObject()) continue;
+        QJsonArray array = doc.array();
+        for (const QJsonValue &val : array) {
             QJsonObject obj = val.toObject();
             QString text = obj["text"].toString();
             QString date = obj["date"].toString();
             QString tag = obj["tag"].toString();
-            bool completed = obj["completed"].toBool(false);
-
+            bool completed = obj["completed"].toBool();
             addTaskItem(text, date, tag, completed);
         }
-
         updateTagFilter();
-        filterTasksByTag(tagFilterCombo->currentText());
+    }
+
+    void saveTasksToFile() {
+        QJsonArray array;
+        for (TaskItem *item : tasks) {
+            QJsonObject obj;
+            obj["text"] = item->text;
+            obj["date"] = item->date;
+            obj["tag"] = item->tag;
+            obj["completed"] = item->completed;
+            array.append(obj);
+        }
+        QJsonDocument doc(array);
+
+        QFile file(tasksFile);
+        if (!file.open(QIODevice::WriteOnly)) {
+            QMessageBox::warning(this, "Ошибка", "Не удалось сохранить задачи.");
+            return;
+        }
+        file.write(doc.toJson());
+        file.close();
+    }
+
+public:
+    // Возвращает список текстов задач на конкретную дату
+    QList<QString> getTasksForDate(const QString &date) {
+        QList<QString> result;
+        for (TaskItem *item : tasks) {
+            if (item->date == date) {
+                result.append(item->text);
+            }
+        }
+        return result;
     }
 };
 

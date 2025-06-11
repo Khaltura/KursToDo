@@ -2,73 +2,59 @@
 #define CALENDARWIDGET_H
 
 #include <QWidget>
+#include <QCalendarWidget>
 #include <QVBoxLayout>
 #include <QLabel>
-#include <QCalendarWidget>
 #include <QDialog>
-#include <QTextBrowser>
+#include <QListWidget>
 #include <QPushButton>
-#include "DatabaseManager.h"
+#include "TaskWidget.h"
 
 class CalendarWidget : public QWidget {
     Q_OBJECT
 public:
-    CalendarWidget(QWidget *parent = nullptr) : QWidget(parent) {
+    CalendarWidget(TaskWidget *taskWidget, QWidget *parent = nullptr) : QWidget(parent), m_taskWidget(taskWidget) {
         QVBoxLayout *layout = new QVBoxLayout(this);
-        QLabel *title = new QLabel("📅 Календарь");
-        title->setAlignment(Qt::AlignCenter);
 
         calendar = new QCalendarWidget;
-        layout->addWidget(title);
         layout->addWidget(calendar);
-        layout->addStretch();
 
-        setLayout(layout);
-
-        connect(calendar, &QCalendarWidget::clicked, this, &CalendarWidget::showTasksForDate);
-
-        dbManager = new DatabaseManager(this);
-        dbManager->openDatabase("tasks.db"); // укажите путь к вашей БД
+        connect(calendar, &QCalendarWidget::activated, this, &CalendarWidget::showTasksOnDate);
     }
 
 private slots:
-    void showTasksForDate(const QDate &date) {
-        QString dateString = date.toString("yyyy-MM-dd");
-        QSqlQuery query = dbManager->getAllTasks();
+    void showTasksOnDate(const QDate &date) {
+        QString dateStr = date.toString("dd.MM.yyyy");
+        QList<QString> tasks = m_taskWidget->getTasksForDate(dateStr);
 
-        QStringList tasks;
-        while (query.next()) {
-            QString taskDate = query.value("date").toString();
-            if (taskDate == dateString) {
-                QString text = query.value("text").toString();
-                QString tag = query.value("tag").toString();
-                tasks << QString("📌 %1 [%2]").arg(text, tag);
-            }
-        }
+        QDialog dialog(this);
+        dialog.setWindowTitle(QString("Задачи на %1").arg(dateStr));
+        dialog.resize(400, 300);
 
-        QDialog *dialog = new QDialog(this);
-        dialog->setWindowTitle("Задачи на " + date.toString("dd.MM.yyyy"));
-        dialog->resize(400, 300);
+        QVBoxLayout *dialogLayout = new QVBoxLayout(&dialog);
 
-        QVBoxLayout *dialogLayout = new QVBoxLayout(dialog);
-        QTextBrowser *browser = new QTextBrowser;
         if (tasks.isEmpty()) {
-            browser->setText("Нет задач на эту дату.");
+            QLabel *label = new QLabel("Задачи отсутствуют.");
+            label->setAlignment(Qt::AlignCenter);
+            dialogLayout->addWidget(label);
         } else {
-            browser->setText(tasks.join("\n\n"));
+            QListWidget *listWidget = new QListWidget;
+            for (const QString &taskText : tasks) {
+                listWidget->addItem(taskText);
+            }
+            dialogLayout->addWidget(listWidget);
         }
 
         QPushButton *closeBtn = new QPushButton("Закрыть");
-        connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
-
-        dialogLayout->addWidget(browser);
+        connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
         dialogLayout->addWidget(closeBtn);
-        dialog->exec();
+
+        dialog.exec();
     }
 
 private:
     QCalendarWidget *calendar;
-    DatabaseManager *dbManager;
+    TaskWidget *m_taskWidget;
 };
 
 #endif // CALENDARWIDGET_H

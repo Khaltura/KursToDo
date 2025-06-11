@@ -1,4 +1,3 @@
-// MainWindow.h
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -21,6 +20,10 @@ private:
     QPushButton *taskButton;
     QPushButton *calendarButton;
     QPushButton *notesButton;
+
+    TaskWidget *taskWidget;         // Хранить для передачи в календарь
+    CalendarWidget *calendarWidget; // Хранить, чтобы показать в stackedWidget
+    NotesWidget *notesWidget;
 };
 
 #endif // MAINWINDOW_H

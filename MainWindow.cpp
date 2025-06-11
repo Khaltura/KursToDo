@@ -1,8 +1,6 @@
-// MainWindow.cpp
 #include "MainWindow.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QDockWidget>
 #include <QSizePolicy>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
@@ -26,10 +24,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     sidePanel->setLayout(sideLayout);
     sidePanel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
+    // Создаем один объект TaskWidget
+    taskWidget = new TaskWidget;
+
+    // Передаем указатель taskWidget в CalendarWidget, чтобы он мог показывать задачи по дате
+    calendarWidget = new CalendarWidget(taskWidget);
+
+    notesWidget = new NotesWidget;
+
     stackedWidget = new QStackedWidget;
-    stackedWidget->addWidget(new TaskWidget);
-    stackedWidget->addWidget(new CalendarWidget);
-    stackedWidget->addWidget(new NotesWidget);
+    stackedWidget->addWidget(taskWidget);        // Индекс 0
+    stackedWidget->addWidget(calendarWidget);    // Индекс 1
+    stackedWidget->addWidget(notesWidget);       // Индекс 2
 
     QHBoxLayout *mainLayout = new QHBoxLayout;
     mainLayout->addWidget(sidePanel);
